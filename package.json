@@ -1,0 +1,20 @@
+{
+  "name": "alfa-card-invoice",
+  "version": "1.0.0",
+  "description": "Shows an Alfa Card invoice and emails it every day at 9:00 AM.",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "send-now": "node server.js --send-now"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "16.4.7",
+    "express": "4.21.2",
+    "node-cron": "3.0.3",
+    "nodemailer": "6.9.16"
+  }
+}

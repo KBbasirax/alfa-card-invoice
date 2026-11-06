@@ -1,0 +1,49 @@
+name: Daily invoice email
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 9:00 AM in Beirut during summer time (UTC+3)
+    - cron: '0 7 * * *'   # 9:00 AM in Beirut during winter time (UTC+2)
+  workflow_dispatch:       # "Run workflow" button: sends right away, for testing
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --omit=dev --no-audit --no-fund
+      - run: node send.js
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || 'smtp.gmail.com' }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT || '465' }}
+          CUSTOMER_NAME: ${{ secrets.CUSTOMER_NAME }}
+          SELLER_NAME: ${{ secrets.SELLER_NAME }}
+          TIMEZONE: Asia/Beirut
+          SEND_HOUR: 9
+
+  # GitHub switches off schedules in public repositories after 60 days with no
+  # activity. Re-enabling the workflow through the API on every scheduled run
+  # keeps the daily email going, without dummy commits.
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/daily-invoice.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
