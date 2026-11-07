@@ -1,11 +1,13 @@
 // Sends today's invoice once. Used by the GitHub Actions workflow.
 //
 // GitHub schedules run in UTC, and Beirut is UTC+3 in summer and UTC+2 in
-// winter. The workflow runs at 06:00 and 07:00 UTC, and this script only
-// sends on the run that lands on SEND_HOUR in Beirut, so the email goes out
-// at 9:00 AM all year without changing anything when the clocks move.
+// winter. The workflow runs just after 06:00 and 07:00 UTC, and this script
+// only sends on the run that lands on SEND_HOUR in Beirut, so the email goes
+// out at 9:00 AM all year without changing anything when the clocks move.
+// A backup run half an hour later sends only if GitHub skipped the first one.
 
 require('dotenv').config();
+const fs = require('fs');
 const { buildInvoice, TIMEZONE, SEND_HOUR } = require('./src/invoice');
 const mailer = require('./src/mailer');
 
@@ -39,7 +41,11 @@ if (!mailer.live && process.env.GITHUB_ACTIONS) {
 const invoice = buildInvoice(new Date());
 mailer
   .sendInvoiceEmail(invoice)
-  .then(() => console.log(`Invoice ${invoice.number} ${mailer.live ? 'sent' : 'logged (preview mode)'}.`))
+  .then(() => {
+    console.log(`Invoice ${invoice.number} ${mailer.live ? 'sent' : 'logged (preview mode)'}.`);
+    // Tell the workflow an email really went out, so the backup run skips today.
+    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'sent=true\n');
+  })
   .catch((err) => {
     console.error(`Sending failed: ${err.message}`);
     process.exit(1);

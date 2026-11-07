@@ -2,12 +2,25 @@ name: Daily invoice email
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 9:00 AM in Beirut during summer time (UTC+3)
-    - cron: '0 7 * * *'   # 9:00 AM in Beirut during winter time (UTC+2)
+    # GitHub runs schedules in UTC. Beirut is UTC+3 in summer and UTC+2 in
+    # winter, so each time is listed for both; send.js skips the one that
+    # isn't 9 AM in Beirut. Minute 3 avoids the busy top of the hour, when
+    # GitHub delays or drops scheduled runs.
+    - cron: '3 6 * * *'    # 9:03 AM Beirut, summer
+    - cron: '3 7 * * *'    # 9:03 AM Beirut, winter
+    # Backup in case GitHub skips the run above. It sends only if today's
+    # email hasn't gone out yet.
+    - cron: '33 6 * * *'   # 9:33 AM Beirut, summer
+    - cron: '33 7 * * *'   # 9:33 AM Beirut, winter
   workflow_dispatch:       # "Run workflow" button: sends right away, for testing
 
 permissions:
   contents: read
+
+# Never run two sends at the same time, so the backup can see the main run's result.
+concurrency:
+  group: daily-invoice
+  cancel-in-progress: false
 
 jobs:
   send:
@@ -15,11 +28,32 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+
+      - name: Work out today's date in Beirut
+        id: day
+        run: echo "date=$(TZ=Asia/Beirut date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether today's email already went out
+        id: already
+        if: github.event_name == 'schedule'
+        uses: actions/cache/restore@v4
+        with:
+          path: .sent
+          key: invoice-sent-${{ steps.day.outputs.date }}
+          lookup-only: true
+
       - uses: actions/setup-node@v4
+        if: steps.already.outputs.cache-hit != 'true'
         with:
           node-version: 20
+
       - run: npm install --omit=dev --no-audit --no-fund
-      - run: node send.js
+        if: steps.already.outputs.cache-hit != 'true'
+
+      - name: Send the invoice
+        id: send
+        if: steps.already.outputs.cache-hit != 'true'
+        run: node send.js
         env:
           SCHEDULE: ${{ github.event.schedule }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' }}
@@ -33,6 +67,16 @@ jobs:
           SELLER_NAME: ${{ secrets.SELLER_NAME }}
           TIMEZONE: Asia/Beirut
           SEND_HOUR: 9
+
+      - name: Remember that today's email went out
+        if: github.event_name == 'schedule' && steps.send.outputs.sent == 'true'
+        run: mkdir -p .sent && date -u > .sent/at
+
+      - uses: actions/cache/save@v4
+        if: github.event_name == 'schedule' && steps.send.outputs.sent == 'true'
+        with:
+          path: .sent
+          key: invoice-sent-${{ steps.day.outputs.date }}
 
   # GitHub switches off schedules in public repositories after 60 days with no
   # activity. Re-enabling the workflow through the API on every scheduled run
