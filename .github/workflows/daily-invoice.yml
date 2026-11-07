@@ -12,9 +12,6 @@ on:
     # email hasn't gone out yet.
     - cron: '33 6 * * *'   # 9:33 AM Beirut, summer
     - cron: '33 7 * * *'   # 9:33 AM Beirut, winter
-    # TEMPORARY test runs, Nov 7 only (11:50 and 11:55 AM Beirut). Remove after the test.
-    - cron: '50 9 7 11 *'
-    - cron: '55 9 7 11 *'
   workflow_dispatch:       # "Run workflow" button: sends right away, for testing
 
 permissions:
@@ -69,8 +66,7 @@ jobs:
           CUSTOMER_NAME: ${{ secrets.CUSTOMER_NAME }}
           SELLER_NAME: ${{ secrets.SELLER_NAME }}
           TIMEZONE: Asia/Beirut
-          # TEMPORARY: the test runs count 11 AM as the send hour. Remove after the test.
-          SEND_HOUR: ${{ endsWith(github.event.schedule, ' 7 11 *') && '11' || '9' }}
+          SEND_HOUR: 9
 
       - name: Remember that today's email went out
         if: github.event_name == 'schedule' && steps.send.outputs.sent == 'true'
